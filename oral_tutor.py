@@ -59,7 +59,7 @@ with st.sidebar:
 
 groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_api_key) if groq_api_key else None
 
-# --- 5. 核心辅助功能 ---
+# --- 5. 辅助功能 ---
 async def get_voice_audio(text, voice="en-US-AvaMultilingualNeural"):
     if not text or len(text.strip()) == 0: return ""
     try:
@@ -79,10 +79,10 @@ def get_ai_response(user_text):
        - phase1_correction: 针对用户的文本纠错和发音指导（中文）。
        - phase2_optimized_text: 提供一个最地道的优化完整例句（英文）。
     2. 【身份：知心朋友】
-       - phase3_interaction: 忘掉老师身份！现在你在平等聊天。先对用户内容给予真诚的情感回应（如：That sounds great!），分享一点看法，最后自然地抛出一个追问。
-    3. phase4_expansion: 提供 2 句针对阶段 3 的应答参考（必须是列表格式，含2个字符串）。
+       - phase3_interaction: 忘掉老师身份！现在你在平等聊天。先对用户内容给予真诚的情感回应，分享看法，最后追问。
+    3. phase4_expansion: 提供 2 句针对阶段 3 的应答参考（列表格式）。
     
-    注意：JSON 字段名必须严格匹配，不要缺失。
+    必须确保返回 JSON 格式，且包含以上所有 key。
     """
     try:
         response = groq_client.chat.completions.create(
@@ -92,15 +92,13 @@ def get_ai_response(user_text):
             temperature=0.7
         )
         return json.loads(response.choices[0].message.content)
-    except Exception as e:
-        st.error(f"AI 响应解析失败: {e}")
-        return None
+    except: return None
 
 # --- 6. 聊天区渲染 ---
-st.title("🎙️ AI 英语口语教练")
+st.title("🎙️ AI 英语口语私教")
 
 if not groq_api_key:
-    st.warning("👈 请先在左侧配置 API Key")
+    st.warning("👈 请先配置 API Key")
 else:
     for i, msg in enumerate(st.session_state.messages):
         if msg["role"] == "user":
@@ -109,12 +107,12 @@ else:
             with st.chat_message("assistant", avatar="🤖"):
                 data = msg["content"]
                 
-                # 1. 纠错展示
-                p1 = data.get("phase1_correction", "暂无点评")
+                # 1. 纠错 (加入多重兜底读取)
+                p1 = data.get("phase1_correction") or data.get("correction") or data.get("phase1") or "AI 暂无点评内容"
                 st.markdown(f'<div class="phase-card phase-1"><div class="phase-header">🔵 AI 纠错点评</div>{p1}</div>', unsafe_allow_html=True)
                 
                 # 2. 优化表达 (手动播放)
-                p2 = data.get("phase2_optimized_text", "")
+                p2 = data.get("phase2_optimized_text") or data.get("optimized_text") or ""
                 if p2:
                     st.markdown(f'<div class="phase-card phase-2"><div class="phase-header">🟢 AI 优化表达 (点击跟读)</div><span style="font-size:1.2rem; color:#1B5E20;"><b>{p2}</b></span>', unsafe_allow_html=True)
                     opt_audio = asyncio.run(get_voice_audio(p2, v_map[voice_choice]))
@@ -123,7 +121,7 @@ else:
                     else: st.markdown('</div>', unsafe_allow_html=True)
 
                 # 3. 互动交流 (自动播放)
-                p3 = data.get("phase3_interaction", "Nice talking to you!")
+                p3 = data.get("phase3_interaction") or data.get("interaction") or "Let's continue!"
                 st.markdown(f'<div class="phase-card phase-3"><div class="phase-header">💬 Chatting with Friend</div>{p3}', unsafe_allow_html=True)
                 
                 inter_audio = asyncio.run(get_voice_audio(p3, v_map[voice_choice]))
@@ -135,7 +133,7 @@ else:
                     if is_new: st.session_state.last_played_id = curr_id
                 else: st.markdown('</div>', unsafe_allow_html=True)
 
-                # 4. 扩展参考 (防御性读取)
+                # 4. 扩展参考
                 p4 = data.get("phase4_expansion", [])
                 if isinstance(p4, list) and len(p4) > 0:
                     tips = " | ".join([f"{idx+1}️⃣ {text}" for idx, text in enumerate(p4)])
@@ -158,17 +156,17 @@ with cols[1]:
                     with open(t_path, "rb") as f:
                         transcript = groq_client.audio.transcriptions.create(model="whisper-large-v3", file=f)
                     os.remove(t_path)
-                    user_text = transcript.text
-                    if user_text.strip():
-                        ai_data = get_ai_response(user_text)
+                    u_text = transcript.text
+                    if u_text.strip():
+                        ai_data = get_ai_response(u_text)
                         if ai_data:
-                            st.session_state.messages.append({"role": "user", "content": user_text})
+                            st.session_state.messages.append({"role": "user", "content": u_text})
                             st.session_state.messages.append({"role": "assistant", "content": ai_data})
                             st.rerun()
     else:
         txt_in = st.chat_input("输入英语句子...")
         if txt_in:
-            with st.spinner("思考中..."):
+            with st.spinner("教练正在思考..."):
                 ai_data = get_ai_response(txt_in)
                 if ai_data:
                     st.session_state.messages.append({"role": "user", "content": txt_in})
