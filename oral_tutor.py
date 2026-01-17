@@ -89,7 +89,7 @@ def get_ai_response(user_text, target_language):
        - phase1_correction: 针对用户的【{target_language}】文本进行纠错和发音/语调指导（始终用中文回答）。
        - phase2_optimized_text: 提供一个最地道、完整的优化例句（必须仅使用【{target_language}】）。
     2. 【身份：知心朋友】
-       - phase3_interaction: 忘掉老师身份，用朋友的语气聊天。必须先对用户内容给予真诚的情感回应，分享看法，最后追问（必须始终使用【{target_language}】）。
+       - phase3_interaction: 请用所在语言的国家居民的正常状态（该内敛就内敛，该热情就热情），对用户内容给予真诚的回应，分享看法，最后追问（必须始终使用【{target_language}】）。
     3. phase4_expansion: 提供 2 句针对阶段 3 的应答参考（必须是列表格式，且仅使用【{target_language}】）。
     
     注意：除了 phase1 用中文外，其余所有教学和互动内容必须严格使用【{target_language}】，严禁切换语言。
@@ -182,3 +182,4 @@ with cols[1]:
                 st.session_state.messages.append({"role": "assistant", "content": ai_data})
                 st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
+
