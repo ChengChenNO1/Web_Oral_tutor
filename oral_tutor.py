@@ -9,7 +9,7 @@ import tempfile
 from streamlit_mic_recorder import mic_recorder
 
 # --- 1. 页面配置 ---
-st.set_page_config(page_title="AI 英语口语私教", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="AI 多语种口语私教", layout="wide", initial_sidebar_state="collapsed")
 
 # --- 2. CSS 样式 ---
 st.markdown("""
@@ -33,24 +33,33 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. 密钥与状态初始化 ---
+# --- 3. 状态初始化 ---
 groq_api_key = st.secrets.get("GROQ_API_KEY", "")
-
 if "messages" not in st.session_state: st.session_state.messages = []
 if "last_played_id" not in st.session_state: st.session_state.last_played_id = None
 
-# --- 4. 侧边栏 ---
+# --- 4. 侧边栏配置 ---
 with st.sidebar:
     st.title("💡 教练设置")
     if not groq_api_key:
         groq_api_key = st.text_input("请输入 Groq API Key", type="password")
     
-    voice_choice = st.selectbox("口音选择", ["美式女声 (Ava)", "英式女声 (Sonia)", "美式男声 (Andrew)"])
-    v_map = {
-        "美式女声 (Ava)": "en-US-AvaMultilingualNeural", 
-        "英式女声 (Sonia)": "en-GB-SoniaNeural", 
-        "美式男声 (Andrew)": "en-US-AndrewMultilingualNeural"
+    # 新增：目标语言选择
+    target_lang = st.selectbox("目标学习语言", ["英语 (English)", "日语 (日本語)", "韩语 (한국어)", "德语 (Deutsch)", "法语 (Français)"])
+    lang_code = target_lang.split(" (")[0]
+    
+    # 动态匹配 TTS 声音
+    voice_options = {
+        "英语": {"Ava (美)": "en-US-AvaMultilingualNeural", "Andrew (美)": "en-US-AndrewMultilingualNeural", "Sonia (英)": "en-GB-SoniaNeural"},
+        "日语": {"Nanami": "ja-JP-NanamiNeural", "Keita": "ja-JP-KeitaNeural"},
+        "韩语": {"Sun-Hi": "ko-KR-SunHiNeural", "In-Joon": "ko-KR-InJoonNeural"},
+        "德语": {"Katja": "de-DE-KatjaNeural", "Killian": "de-DE-KillianNeural"},
+        "法语": {"Denise": "fr-FR-DeniseNeural", "Eloise": "fr-FR-EloiseNeural"}
     }
+    current_voices = voice_options.get(lang_code, voice_options["英语"])
+    voice_name = st.selectbox("教练声音", list(current_voices.keys()))
+    selected_voice = current_voices[voice_name]
+
     input_mode = st.radio("录入模式", ["语音", "文字"])
     if st.button("🗑️ 清空历史"):
         st.session_state.messages = []
@@ -59,8 +68,8 @@ with st.sidebar:
 
 groq_client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=groq_api_key) if groq_api_key else None
 
-# --- 5. 辅助功能 ---
-async def get_voice_audio(text, voice="en-US-AvaMultilingualNeural"):
+# --- 5. 核心辅助功能 ---
+async def get_voice_audio(text, voice):
     if not text or len(text.strip()) == 0: return ""
     try:
         communicate = edge_tts.Communicate(text, voice)
@@ -72,17 +81,18 @@ async def get_voice_audio(text, voice="en-US-AvaMultilingualNeural"):
         return base64.b64encode(data).decode()
     except: return ""
 
-def get_ai_response(user_text):
-    system_prompt = """
-    你现在拥有双重身份，请严格按顺序执行并输出 JSON：
+def get_ai_response(user_text, target_language):
+    system_prompt = f"""
+    你现在是一名精通中英双语的专业口语教练，目前正在教用户学习【{target_language}】。
+    请严格按顺序执行并输出 JSON：
     1. 【身份：专业导师】
-       - phase1_correction: 针对用户的文本纠错和发音指导（中文）。
-       - phase2_optimized_text: 提供一个最地道的优化完整例句（英文）。
+       - phase1_correction: 针对用户的【{target_language}】文本进行纠错和发音/语调指导（始终用中文回答）。
+       - phase2_optimized_text: 提供一个最地道、完整的优化例句（必须仅使用【{target_language}】）。
     2. 【身份：知心朋友】
-       - phase3_interaction: 忘掉老师身份！现在你在平等聊天。先对用户内容给予真诚的情感回应，分享看法，最后追问。
-    3. phase4_expansion: 提供 2 句针对阶段 3 的应答参考（列表格式）。
+       - phase3_interaction: 忘掉老师身份，用朋友的语气聊天。必须先对用户内容给予真诚的情感回应，分享看法，最后追问（必须始终使用【{target_language}】）。
+    3. phase4_expansion: 提供 2 句针对阶段 3 的应答参考（必须是列表格式，且仅使用【{target_language}】）。
     
-    必须确保返回 JSON 格式，且包含以上所有 key。
+    注意：除了 phase1 用中文外，其余所有教学和互动内容必须严格使用【{target_language}】，严禁切换语言。
     """
     try:
         response = groq_client.chat.completions.create(
@@ -95,10 +105,10 @@ def get_ai_response(user_text):
     except: return None
 
 # --- 6. 聊天区渲染 ---
-st.title("🎙️ AI 英语口语私教")
+st.title(f"🎙️ AI {lang_code}口语私教")
 
 if not groq_api_key:
-    st.warning("👈 请先配置 API Key")
+    st.warning("👈 请先在左侧配置 API Key")
 else:
     for i, msg in enumerate(st.session_state.messages):
         if msg["role"] == "user":
@@ -106,25 +116,19 @@ else:
         else:
             with st.chat_message("assistant", avatar="🤖"):
                 data = msg["content"]
+                p1 = data.get("phase1_correction") or data.get("correction") or "AI 暂无点评"
+                st.markdown(f'<div class="phase-card phase-1"><div class="phase-header">🔵 AI 纠错点评 (中文)</div>{p1}</div>', unsafe_allow_html=True)
                 
-                # 1. 纠错 (加入多重兜底读取)
-                p1 = data.get("phase1_correction") or data.get("correction") or data.get("phase1") or "AI 暂无点评内容"
-                st.markdown(f'<div class="phase-card phase-1"><div class="phase-header">🔵 AI 纠错点评</div>{p1}</div>', unsafe_allow_html=True)
-                
-                # 2. 优化表达 (手动播放)
-                p2 = data.get("phase2_optimized_text") or data.get("optimized_text") or ""
+                p2 = data.get("phase2_optimized_text") or ""
                 if p2:
-                    st.markdown(f'<div class="phase-card phase-2"><div class="phase-header">🟢 AI 优化表达 (点击跟读)</div><span style="font-size:1.2rem; color:#1B5E20;"><b>{p2}</b></span>', unsafe_allow_html=True)
-                    opt_audio = asyncio.run(get_voice_audio(p2, v_map[voice_choice]))
-                    if opt_audio:
-                        st.markdown(f'<audio src="data:audio/mp3;base64,{opt_audio}" controls></audio></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="phase-card phase-2"><div class="phase-header">🟢 {lang_code}优化表达 (点击跟读)</div><span style="font-size:1.2rem; color:#1B5E20;"><b>{p2}</b></span>', unsafe_allow_html=True)
+                    opt_audio = asyncio.run(get_voice_audio(p2, selected_voice))
+                    if opt_audio: st.markdown(f'<audio src="data:audio/mp3;base64,{opt_audio}" controls></audio></div>', unsafe_allow_html=True)
                     else: st.markdown('</div>', unsafe_allow_html=True)
 
-                # 3. 互动交流 (自动播放)
-                p3 = data.get("phase3_interaction") or data.get("interaction") or "Let's continue!"
-                st.markdown(f'<div class="phase-card phase-3"><div class="phase-header">💬 Chatting with Friend</div>{p3}', unsafe_allow_html=True)
-                
-                inter_audio = asyncio.run(get_voice_audio(p3, v_map[voice_choice]))
+                p3 = data.get("phase3_interaction") or ""
+                st.markdown(f'<div class="phase-card phase-3"><div class="phase-header">💬 {lang_code}互动交流</div>{p3}', unsafe_allow_html=True)
+                inter_audio = asyncio.run(get_voice_audio(p3, selected_voice))
                 if inter_audio:
                     curr_id = hash(p3)
                     is_new = (i == len(st.session_state.messages) - 1) and (st.session_state.last_played_id != curr_id)
@@ -133,43 +137,48 @@ else:
                     if is_new: st.session_state.last_played_id = curr_id
                 else: st.markdown('</div>', unsafe_allow_html=True)
 
-                # 4. 扩展参考
                 p4 = data.get("phase4_expansion", [])
                 if isinstance(p4, list) and len(p4) > 0:
                     tips = " | ".join([f"{idx+1}️⃣ {text}" for idx, text in enumerate(p4)])
                     st.markdown(f"<div style='padding-left:15px; margin-bottom:15px;'><small style='color:#888;'>💡 回应参考: {tips}</small></div>", unsafe_allow_html=True)
 
-# --- 7. 底部输入 ---
+# --- 7. 底部输入与校验 ---
 st.markdown('<div class="footer-container">', unsafe_allow_html=True)
 cols = st.columns([1, 6, 1])
 with cols[1]:
     if input_mode == "语音":
-        audio_in = mic_recorder(start_prompt="🎤 长按开始录音", stop_prompt="✅ 松开发送", key='recorder', use_container_width=True)
+        audio_in = mic_recorder(start_prompt="🎤 长按录音", stop_prompt="✅ 松开发送", key='recorder', use_container_width=True)
         if audio_in:
-            curr_hash = hash(audio_in['bytes'])
-            if "last_audio_hash" not in st.session_state or st.session_state.last_audio_hash != curr_hash:
-                st.session_state.last_audio_hash = curr_hash
-                with st.spinner("教练正在听..."):
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                        tmp.write(audio_in['bytes'])
-                        t_path = tmp.name
-                    with open(t_path, "rb") as f:
-                        transcript = groq_client.audio.transcriptions.create(model="whisper-large-v3", file=f)
-                    os.remove(t_path)
-                    u_text = transcript.text
-                    if u_text.strip():
-                        ai_data = get_ai_response(u_text)
-                        if ai_data:
-                            st.session_state.messages.append({"role": "user", "content": u_text})
-                            st.session_state.messages.append({"role": "assistant", "content": ai_data})
-                            st.rerun()
+            # 校验1：检查字节大小（例如小于 1000 字节通常是误触）
+            if len(audio_in['bytes']) < 1500:
+                st.warning("⚠️ 录音时间过短，请长按录制完整的句子。")
+            else:
+                curr_hash = hash(audio_in['bytes'])
+                if "last_audio_hash" not in st.session_state or st.session_state.last_audio_hash != curr_hash:
+                    st.session_state.last_audio_hash = curr_hash
+                    with st.spinner("正在识别语音..."):
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                            tmp.write(audio_in['bytes'])
+                            t_path = tmp.name
+                        with open(t_path, "rb") as f:
+                            transcript = groq_client.audio.transcriptions.create(model="whisper-large-v3", file=f)
+                        os.remove(t_path)
+                        u_text = transcript.text
+                        # 校验2：检查识别出的文本是否有效
+                        if not u_text or len(u_text.strip()) < 2:
+                            st.warning("⚠️ 无法识别您的语音，请重试。")
+                        else:
+                            ai_data = get_ai_response(u_text, lang_code)
+                            if ai_data:
+                                st.session_state.messages.append({"role": "user", "content": u_text})
+                                st.session_state.messages.append({"role": "assistant", "content": ai_data})
+                                st.rerun()
     else:
-        txt_in = st.chat_input("输入英语句子...")
+        txt_in = st.chat_input(f"用{lang_code}输入句子...")
         if txt_in:
-            with st.spinner("教练正在思考..."):
-                ai_data = get_ai_response(txt_in)
-                if ai_data:
-                    st.session_state.messages.append({"role": "user", "content": txt_in})
-                    st.session_state.messages.append({"role": "assistant", "content": ai_data})
-                    st.rerun()
+            ai_data = get_ai_response(txt_in, lang_code)
+            if ai_data:
+                st.session_state.messages.append({"role": "user", "content": txt_in})
+                st.session_state.messages.append({"role": "assistant", "content": ai_data})
+                st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
