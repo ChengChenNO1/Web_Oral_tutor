@@ -147,11 +147,11 @@ st.markdown('<div class="footer-container">', unsafe_allow_html=True)
 cols = st.columns([1, 6, 1])
 with cols[1]:
     if input_mode == "语音":
-        audio_in = mic_recorder(start_prompt="🎤 长按录音", stop_prompt="✅ 松开发送", key='recorder', use_container_width=True)
+        audio_in = mic_recorder(start_prompt="🎤 点击录音", stop_prompt="✅ 点击发送", key='recorder', use_container_width=True)
         if audio_in:
             # 校验1：检查字节大小（例如小于 1000 字节通常是误触）
             if len(audio_in['bytes']) < 1500:
-                st.warning("⚠️ 录音时间过短，请长按录制完整的句子。")
+                st.warning("⚠️ 录音时间过短或未识别到您说话，请点击录制完整的句子。")
             else:
                 curr_hash = hash(audio_in['bytes'])
                 if "last_audio_hash" not in st.session_state or st.session_state.last_audio_hash != curr_hash:
@@ -182,5 +182,6 @@ with cols[1]:
                 st.session_state.messages.append({"role": "assistant", "content": ai_data})
                 st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
+
 
 
