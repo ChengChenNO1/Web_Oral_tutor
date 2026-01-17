@@ -121,13 +121,13 @@ else:
                 
                 p2 = data.get("phase2_optimized_text") or ""
                 if p2:
-                    st.markdown(f'<div class="phase-card phase-2"><div class="phase-header">🟢 {lang_code}优化表达 (点击跟读)</div><span style="font-size:1.2rem; color:#1B5E20;"><b>{p2}</b></span>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="phase-card phase-2"><div class="phase-header">🟢 优化表达 (点击跟读)</div><span style="font-size:1.2rem; color:#1B5E20;"><b>{p2}</b></span>', unsafe_allow_html=True)
                     opt_audio = asyncio.run(get_voice_audio(p2, selected_voice))
                     if opt_audio: st.markdown(f'<audio src="data:audio/mp3;base64,{opt_audio}" controls></audio></div>', unsafe_allow_html=True)
                     else: st.markdown('</div>', unsafe_allow_html=True)
 
                 p3 = data.get("phase3_interaction") or ""
-                st.markdown(f'<div class="phase-card phase-3"><div class="phase-header">💬 {lang_code}互动交流</div>{p3}', unsafe_allow_html=True)
+                st.markdown(f'<div class="phase-card phase-3"><div class="phase-header">💬 互动交流</div>{p3}', unsafe_allow_html=True)
                 inter_audio = asyncio.run(get_voice_audio(p3, selected_voice))
                 if inter_audio:
                     curr_id = hash(p3)
@@ -182,4 +182,5 @@ with cols[1]:
                 st.session_state.messages.append({"role": "assistant", "content": ai_data})
                 st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
+
 
